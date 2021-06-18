@@ -2,19 +2,83 @@
 
 [A Multi-View Deep Learning Approach for Cross Domain User Modeling in Recommendation Systems](http://blog.csdn.net/shine19930820/article/details/78810984)的实现Demo。
 
+# 注意：
+**\*\*\*\*2020/11/15\*\*\*\***
+
+论文[li2020sentence](https://arxiv.org/abs/2011.05864)将normalizing flows和bert结合，在语义相似度任务上有奇效，接下来会继续进行验证。
+
+**\*\*\*\*2020/10/27\*\*\*\***
+
+添加底层使用bert的siamese-bert实验，见[siamese\_network.py](https://github.com/InsaneLife/dssm/blob/master/model/siamese_network.py)中类 SiamenseBert，其他和下面一样.
+
+相比于[bert](https://github.com/InsaneLife/dssm/blob/master/model/bert_classifier.py) 直接将两句作为输入，双塔bert的优势在于：
+- max sequence len会更短，训练所需要显存更小，速度会稍微快一些，对于硬件不是太好的伙伴比较友好。
+- 可以训练后使用bert作为句子embedding的encoder，在一些线上匹配的时候，可以预先将需要对比的句子向量算出来，节省实时算力。
+- 效果相比于直接用bert输入两句，测试集会差一个多点。
+- bert可以使用[CLS]的输出或者average context embedding, 一般后者效果会更好。
+```shell
+# bert_siamese双塔模型
+python train.py --mode=train --method=bert_siamese
+# 直接使用功能bert
+python train.py --mode=train --method=bert
+```
+参考：[reimers2019sentence](https://arxiv.org/abs/1908.10084)
+
+**\*\*\*\*2020/10/17\*\*\*\***
+
+由于之前数据集问题，会有不收敛问题，现更换数据集为LCQMC口语化描述的语义相似度数据集。模型也从多塔变成了双塔模型，见[siamese\_network.py](https://github.com/InsaneLife/dssm/blob/master/model/siamese_network.py), 训练入口：[train.py](https://github.com/InsaneLife/dssm/blob/master/train.py)
+
+> 难以找到搜索点击的公开数据集，暂且用语义相似任务数据集，有点变味了，哈哈
+> 目前看在此数据集上测试数据集的准确率是提升的，只有七十多，但是要达到论文的准确率，仍然还需要进行调参
+
+训练（默认使用功LCQMC数据集）：
+
+```shell
+python train.py --mode=train
+```
+
+预测：
+
+```shell
+python train.py --mode=train --file=$predict_file$
+```
+
+测试文件格式: q1\tq2, 例如：
+
+```
+今天天气怎么样	今天温度怎么样
+```
 
 
-# 1. 数据
+
+**\*\*\*\*2019/5/18\*\*\*\***
+
+由于之前代码api过时，已更新最新代码于：[dssm\_rnn.py](https://github.com/InsaneLife/dssm/blob/master/dssm_rnn.py)
+
+数据处理代码[data\_input.py](https://github.com/InsaneLife/dssm/blob/master/data_input.py) 和数据[data](https://github.com/InsaneLife/dssm/tree/master/data) 已经更新，由于使用了rnn，所以**输入非bag of words方式。**
+
+![img](https://ask.qcloudimg.com/http-save/yehe-1881084/7ficv1hhqf.png?imageView2/2/w/1620)
+
+> 来源：Palangi, Hamid, et al. "Semantic modelling with long-short-term memory for information retrieval." arXiv preprint arXiv:1412.6629 2014.
+> 
+> 训练损失，在45个epoch时基本不下降：
+> 
+> ![dssm_rnn_loss](https://raw.githubusercontent.com/InsaneLife/dssm/master/assets/dssm_rnn_loss.png)
+
+# 1\. 数据&环境
 
 DSSM，对于输入数据是Query对，即Query短句和相应的展示，展示中分点击和未点击，分别为正负样，同时对于点击的先后顺序，也是有不同赋值，具体可参考论文。
 
 对于我的Query数据本人无权开放，还请自行寻找数据。
+环境：
 
-# 2. word hashing
+1. win, python3.5, tensorflow1.4.
+
+# 2\. word hashing
 
 原文使用3-grams，对于中文，我使用了uni-gram，因为中文本身字有一定代表意义（也有论文拆笔画），对于每个gram都使用one-hot编码代替，最终可以大大降低短句维度。
 
-# 3. 结构
+# 3\. 结构
 
 结构图：
 
@@ -25,9 +89,9 @@ DSSM，对于输入数据是Query对，即Query短句和相应的展示，展示
 
 ## 3.1 输入
 
-这里使用了TensorBoard可视化，所以定义了name_scope:
+这里使用了TensorBoard可视化，所以定义了name\_scope:
 
-```python
+``` python
 with tf.name_scope('input'):
     query_batch = tf.sparse_placeholder(tf.float32, shape=[None, TRIGRAM_D], name='QueryBatch')
     doc_positive_batch = tf.sparse_placeholder(tf.float32, shape=[None, TRIGRAM_D], name='DocBatch')
@@ -39,10 +103,10 @@ with tf.name_scope('input'):
 
 我使用三层的全连接层，对于每一层全连接层，除了神经元不一样，其他都一样，所以可以写一个函数复用。
 $$
-l_n = W_n x + b_1
+l\_n = W\_n x + b\_1
 $$
 
-```python
+``` python
 def add_layer(inputs, in_size, out_size, activation_function=None):
     wlimit = np.sqrt(6.0 / (in_size + out_size))
     Weights = tf.Variable(tf.random_uniform([in_size, out_size], -wlimit, wlimit))
@@ -57,7 +121,7 @@ def add_layer(inputs, in_size, out_size, activation_function=None):
 
 其中，对于权重和Bias，使用了按照论文的特定的初始化方式：
 
-```python
+``` python
 	wlimit = np.sqrt(6.0 / (in_size + out_size))
     Weights = tf.Variable(tf.random_uniform([in_size, out_size], -wlimit, wlimit))
     biases = tf.Variable(tf.random_uniform([out_size], -wlimit, wlimit))
@@ -65,7 +129,7 @@ def add_layer(inputs, in_size, out_size, activation_function=None):
 
 ### Batch Normalization
 
-```python
+``` python
 def batch_normalization(x, phase_train, out_size):
     """
     Batch normalization on convolutional maps.
@@ -100,7 +164,7 @@ def batch_normalization(x, phase_train, out_size):
 
 ### 单层
 
-```python
+``` python
 with tf.name_scope('FC1'):
     # 激活函数在BN之后，所以此处为None
     query_l1 = add_layer(query_batch, TRIGRAM_D, L1_N, activation_function=None)
@@ -120,7 +184,7 @@ with tf.name_scope('BN1'):
 
 合并负样本
 
-```python
+``` python
 with tf.name_scope('Merge_Negative_Doc'):
     # 合并负样本，tile可选择是否扩展负样本。
     doc_y = tf.tile(doc_positive_y, [1, 1])
@@ -132,7 +196,7 @@ with tf.name_scope('Merge_Negative_Doc'):
 
 ## 3.3 计算cos相似度
 
-```python
+``` python
 with tf.name_scope('Cosine_Similarity'):
     # Cosine similarity
     # query_norm = sqrt(sum(each x^2))
@@ -151,7 +215,7 @@ with tf.name_scope('Cosine_Similarity'):
 
 ## 3.4 定义损失函数
 
-```python
+``` python
 with tf.name_scope('Loss'):
     # Train Loss
     # 转化为softmax概率矩阵。
@@ -164,15 +228,15 @@ with tf.name_scope('Loss'):
 
 ## 3.5选择优化方法
 
-```python
+``` python
 with tf.name_scope('Training'):
     # Optimizer
     train_step = tf.train.AdamOptimizer(FLAGS.learning_rate).minimize(loss)
 ```
 
- ## 3.6 开始训练
+## 3.6 开始训练
 
-```python
+``` python
 # 创建一个Saver对象，选择性保存变量或者模型。
 saver = tf.train.Saver()
 # with tf.Session(config=config) as sess:
@@ -187,11 +251,23 @@ with tf.Session() as sess:
 
 GitHub完整代码 [https://github.com/InsaneLife/dssm](https://github.com/InsaneLife/dssm)
 
-Multi-view DSSM实现同理，可以参考GitHub：[multi_view_dssm_v3](https://github.com/InsaneLife/dssm/blob/master/multi_view_dssm_v3.py)
-
-
+Multi-view DSSM实现同理，可以参考GitHub：[multi\_view\_dssm\_v3](https://github.com/InsaneLife/dssm/blob/master/multi_view_dssm_v3.py)
 
 CSDN原文：[http://blog.csdn.net/shine19930820/article/details/79042567](http://blog.csdn.net/shine19930820/article/details/79042567)
 
+## 自动调参
+参数搜索空间：[search_space.json](./configs/search_space.json)
+配置文件：[auto_ml.yml](auto_ml.yml)
+启动命令
+```shell
+nnictl create --config auto_ml.yml -p 8888
+```
+> 由于没有gpu 😂，[auto_ml.yml](auto_ml.yml)设置中没有配置gpu，有gpu同学可自行配置。
+
+详细文档：https://nni.readthedocs.io/zh/latest/Overview.html
 
 
+# Reference
+- [li2020sentence](https://arxiv.org/abs/2011.05864)
+- [Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks](https://arxiv.org/abs/1908.10084)
+- nni 调参: https://nni.readthedocs.io/zh/latest/Overview.html

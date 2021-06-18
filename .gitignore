@@ -1,0 +1,22 @@
+# data
+data/*
+!data/readme.md
+!data/vocab.txt
+Summaries/
+
+Summaries/*
+results/*
+log
+tmp
+
+# py
+test.py
+
+# 通用
+.unotes/
+envi/
+__pycache__/
+.vscode/
+*.pyc
+.DS_Store
+*.DS_Store
